@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOVE Matrix Animation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #030204;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="matrixCanvas"></canvas>
+    <canvas id="particleCanvas"></canvas>
+
+    <script>
+        // ==================== CẤU HÌNH & BIẾN TOÀN CỤC ====================
+        // ==================== CẤU HÌNH & BIẾN TOÀN CỤC ====================
+        const WORDS = ["HÙNG", "THÍCH", "YẾN,", "LÀM", "VỢ", "MẠNH", "NHÉ!, AHIHI!"];
+
+        // 1. Thay đổi thời gian hiển thị tại đây (ví dụ giảm xuống 3 giây)
+        const DURATION_PER_WORD = 5000; // Mặc định là 10000 (10s) -> Đổi thành 3000 (3s) hoặc 5000 (5s)
+
+        // 2. Giảm thời gian hiệu ứng mờ dần (Fade in / Fade out) tương ứng
+        const FADE_TIME = 600;          // Mặc định là 1200 (1.2s) -> Đổi thành 600 (0.6s)
+        const LOVE_CHARS = ["L", "O", "V", "E"];
+
+        const matrixCanvas = document.getElementById("matrixCanvas");
+        const particleCanvas = document.getElementById("particleCanvas");
+        const ctxMatrix = matrixCanvas.getContext("2d");
+        const ctxParticle = particleCanvas.getContext("2d");
+
+        let width, height;
+        let columns, drops;
+        const fontSize = 14;
+
+        // ==================== KHỞI TẠO & RESIZE ====================
+        function resize() {
+            width = matrixCanvas.width = particleCanvas.width = window.innerWidth;
+            height = matrixCanvas.height = particleCanvas.height = window.innerHeight;
+
+            columns = Math.floor(width / fontSize);
+            drops = [];
+            for (let i = 0; i < columns; i++) {
+                drops[i] = Math.random() * -100; // Vị trí ngẫu nhiên phía trên màn hình
+            }
+        }
+        window.addEventListener("resize", resize);
+        resize();
+
+        // ==================== HIỆU ỨNG MƯA CHỮ 'LOVE' ====================
+        function drawMatrixRain() {
+            ctxMatrix.fillStyle = "rgba(3, 2, 4, 0.12)";
+            ctxMatrix.fillRect(0, 0, width, height);
+
+            ctxMatrix.font = `bold ${fontSize}px monospace`;
+
+            for (let i = 0; i < drops.length; i++) {
+                const char = LOVE_CHARS[Math.floor(Math.random() * LOVE_CHARS.length)];
+                const x = i * fontSize;
+                const y = drops[i] * fontSize;
+
+                // Đầu vệt rơi sáng trắng/hồng nhạt, thân vệt màu hồng đậm
+                const isLeading = Math.random() > 0.85;
+                ctxMatrix.fillStyle = isLeading ? "#ffd1dc" : "rgba(255, 75, 130, 0.45)";
+                ctxMatrix.fillText(char, x, y);
+
+                if (y > height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+        }
+
+        // ==================== XỬ LÝ CHỮ DẠNG HẠT (DOT MATRIX) ====================
+        const offCanvas = document.createElement("canvas");
+        const offCtx = offCanvas.getContext("2d", { willReadFrequently: true });
+
+        function getWordCoordinates(text) {
+            const size = Math.min(width / (text.length * 0.75), 150);
+            offCanvas.width = width;
+            offCanvas.height = height;
+
+            offCtx.clearRect(0, 0, width, height);
+            offCtx.fillStyle = "#ffffff";
+            offCtx.font = `900 ${size}px "Arial Black", "Segoe UI", sans-serif`;
+            offCtx.textAlign = "center";
+            offCtx.textBaseline = "middle";
+            offCtx.fillText(text, width / 2, height / 2);
+
+            const imgData = offCtx.getImageData(0, 0, width, height).data;
+            const points = [];
+            const step = Math.max(4, Math.floor(size / 22)); // Khoảng cách giữa các hạt
+
+            for (let y = 0; y < height; y += step) {
+                for (let x = 0; x < width; x += step) {
+                    const index = (y * width + x) * 4;
+                    if (imgData[index + 3] > 128) {
+                        points.push({ x, y });
+                    }
+                }
+            }
+            return points;
+        }
+
+        // ==================== QUẢN LÝ HẠT & CHUYỂN ĐỔI TỪ ====================
+        class Particle {
+            constructor(x, y) {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.targetX = x;
+                this.targetY = y;
+                this.radius = 2.5 + Math.random() * 1.5;
+                this.speed = 0.05 + Math.random() * 0.05;
+                this.alpha = 0;
+            }
+
+            update(targetAlpha) {
+                this.x += (this.targetX - this.x) * this.speed;
+                this.y += (this.targetY - this.y) * this.speed;
+                this.alpha += (targetAlpha - this.alpha) * 0.08;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, Math.min(1, this.alpha));
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = "#ffffff";
+                ctx.shadowColor = "rgba(255, 105, 180, 0.9)";
+                ctx.shadowBlur = 8;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        let particles = [];
+        let currentWordIndex = 0;
+        let wordStartTime = performance.now();
+
+        function updateWordPoints() {
+            const text = WORDS[currentWordIndex];
+            const targetPoints = getWordCoordinates(text);
+
+            particles = targetPoints.map(pt => {
+                const p = new Particle(pt.x, pt.y);
+                p.x = pt.x + (Math.random() - 0.5) * 80;
+                p.y = pt.y + (Math.random() - 0.5) * 80;
+                return p;
+            });
+        }
+
+        updateWordPoints();
+
+        // ==================== VÒNG LẶP RENDER CHÍNH ====================
+        function loop(timestamp) {
+            drawMatrixRain();
+
+            ctxParticle.clearRect(0, 0, width, height);
+
+            const elapsed = (timestamp - wordStartTime) % DURATION_PER_WORD;
+
+            // Tính toán độ mờ (Alpha) cho chu kỳ: Xuất hiện -> Duy trì -> Ẩn đi
+            let targetAlpha = 1;
+            if (elapsed < FADE_TIME) {
+                targetAlpha = elapsed / FADE_TIME; // Mờ dần vào
+            } else if (elapsed > DURATION_PER_WORD - FADE_TIME) {
+                targetAlpha = (DURATION_PER_WORD - elapsed) / FADE_TIME; // Mờ dần ra
+            }
+
+            // Chuyển sang từ kế tiếp sau 10 giây
+            if (timestamp - wordStartTime >= DURATION_PER_WORD) {
+                wordStartTime = timestamp;
+                currentWordIndex = (currentWordIndex + 1) % WORDS.length;
+                updateWordPoints();
+            }
+
+            // Vẽ các hạt chấm sáng
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update(targetAlpha);
+                particles[i].draw(ctxParticle);
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        requestAnimationFrame(loop);
+    </script>
+</body>
+
+</html>
